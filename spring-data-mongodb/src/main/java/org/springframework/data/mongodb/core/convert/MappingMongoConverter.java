@@ -64,8 +64,10 @@ import org.springframework.data.mongodb.CodecRegistryProvider;
 import org.springframework.data.mongodb.MongoDatabaseFactory;
 import org.springframework.data.mongodb.core.mapping.Embedded;
 import org.springframework.data.mongodb.core.mapping.Embedded.OnEmpty;
+import org.springframework.data.mongodb.core.mapping.ManualReference;
 import org.springframework.data.mongodb.core.mapping.MongoPersistentEntity;
 import org.springframework.data.mongodb.core.mapping.MongoPersistentProperty;
+import org.springframework.data.mongodb.core.mapping.ObjectReference;
 import org.springframework.data.mongodb.core.mapping.event.AfterConvertCallback;
 import org.springframework.data.mongodb.core.mapping.event.AfterConvertEvent;
 import org.springframework.data.mongodb.core.mapping.event.AfterLoadEvent;
@@ -73,6 +75,7 @@ import org.springframework.data.mongodb.core.mapping.event.MongoMappingEvent;
 import org.springframework.data.mongodb.util.BsonUtils;
 import org.springframework.data.util.ClassTypeInformation;
 import org.springframework.data.util.TypeInformation;
+import org.springframework.expression.Expression;
 import org.springframework.lang.Nullable;
 import org.springframework.util.Assert;
 import org.springframework.util.ClassUtils;
@@ -495,6 +498,14 @@ public class MappingMongoConverter extends AbstractMongoConverter implements App
 			return;
 		}
 
+		if(property.isAnnotationPresent(ManualReference.class)) {
+			String lookup = property.getRequiredAnnotation(ManualReference.class).lookup();
+			Expression expression = spELContext.getParser().parseExpression(lookup);
+			Object lookupQuery = expression.getValue(value);
+			System.out.println("lookupQuery: " + lookupQuery);
+			
+		}
+
 		DBRef dbref = value instanceof DBRef ? (DBRef) value : null;
 		accessor.setProperty(property, dbRefResolver.resolveDbRef(property, dbref, callback, handler));
 	}
@@ -718,6 +729,11 @@ public class MappingMongoConverter extends AbstractMongoConverter implements App
 			dbRefObj = dbRefObj != null ? dbRefObj : createDBRef(obj, prop);
 
 			accessor.put(prop, dbRefObj);
+			return;
+		}
+
+		if(prop.isAssociation() && conversionService.canConvert(valueType.getType(), ObjectReference.class)) {
+			accessor.put(prop, conversionService.convert(obj, ObjectReference.class).getPointer());
 			return;
 		}
 
