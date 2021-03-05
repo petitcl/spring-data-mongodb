@@ -127,6 +127,19 @@ public class DefaultDbRefResolver implements DbRefResolver {
 		return mongoCollection.find(Filters.eq("_id", dbRef.getId())).first();
 	}
 
+	@Nullable
+	@Override
+	public Document fetch(Document dbRef) {
+
+		System.out.println("fetching: " + dbRef);
+		MongoCollection<Document> collection = MongoDatabaseUtils.getDatabase("manual-reference-tests", mongoDbFactory)
+				.getCollection("justSomeType", Document.class);
+
+		Document x = collection.find(dbRef).first();
+		System.out.println("x: " + x);
+		return x;
+	}
+
 	/*
 	 * (non-Javadoc)
 	 * @see org.springframework.data.mongodb.core.convert.DbRefResolver#bulkFetch(java.util.List)

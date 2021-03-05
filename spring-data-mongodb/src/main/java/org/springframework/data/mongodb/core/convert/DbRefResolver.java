@@ -80,6 +80,11 @@ public interface DbRefResolver {
 	@Nullable
 	Document fetch(DBRef dbRef);
 
+	@Nullable
+	default Document fetch(Document dbRef) {
+		return null;
+	}
+
 	/**
 	 * Loads a given {@link List} of {@link DBRef}s from the datasource in one batch. The resulting {@link List} of
 	 * {@link Document} will reflect the ordering of the {@link DBRef} passed in.<br />
