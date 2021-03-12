@@ -32,6 +32,7 @@ import java.util.stream.Stream;
 import org.aopalliance.intercept.MethodInterceptor;
 import org.aopalliance.intercept.MethodInvocation;
 import org.bson.Document;
+import org.bson.conversions.Bson;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.aop.framework.ProxyFactory;
@@ -47,6 +48,7 @@ import org.springframework.data.mongodb.LazyLoadingException;
 import org.springframework.data.mongodb.MongoDatabaseFactory;
 import org.springframework.data.mongodb.MongoDatabaseUtils;
 import org.springframework.data.mongodb.core.mapping.MongoPersistentProperty;
+import org.springframework.data.util.Streamable;
 import org.springframework.lang.Nullable;
 import org.springframework.objenesis.ObjenesisStd;
 import org.springframework.util.Assert;
@@ -67,7 +69,7 @@ import com.mongodb.client.model.Filters;
  * @author Mark Paluch
  * @since 1.4
  */
-public class DefaultDbRefResolver implements DbRefResolver {
+public class DefaultDbRefResolver implements DbRefResolver, ReferenceResolver {
 
 	private static final Logger LOGGER = LoggerFactory.getLogger(DefaultDbRefResolver.class);
 
@@ -108,37 +110,48 @@ public class DefaultDbRefResolver implements DbRefResolver {
 		return callback.resolve(property);
 	}
 
+	@Nullable
+	@Override
+	public Object resolveReference(MongoPersistentProperty property, Object source, ResolutionContext context) {
+		return null;
+	}
+
 	/*
 	 * (non-Javadoc)
 	 * @see org.springframework.data.mongodb.core.convert.DbRefResolver#fetch(com.mongodb.DBRef)
 	 */
 	@Override
 	public Document fetch(DBRef dbRef) {
-
-		MongoCollection<Document> mongoCollection = getCollection(dbRef);
-
-		if (LOGGER.isTraceEnabled()) {
-			LOGGER.trace("Fetching DBRef '{}' from {}.{}.", dbRef.getId(),
-					StringUtils.hasText(dbRef.getDatabaseName()) ? dbRef.getDatabaseName()
-							: mongoCollection.getNamespace().getDatabaseName(),
-					dbRef.getCollectionName());
-		}
-
-		return mongoCollection.find(Filters.eq("_id", dbRef.getId())).first();
+		return fetch(Filters.eq("_id", dbRef.getId()), ReferenceContext.fromDBRef(dbRef));
 	}
 
 	@Nullable
 	@Override
-	public Document fetch(Document dbRef) {
+	public Document fetch(Bson filter, ReferenceContext context) {
 
-		System.out.println("fetching: " + dbRef);
-		MongoCollection<Document> collection = MongoDatabaseUtils.getDatabase("manual-reference-tests", mongoDbFactory)
-				.getCollection("justSomeType", Document.class);
+		MongoCollection<Document> collection = getCollection(context);
 
-		Document x = collection.find(dbRef).first();
-		System.out.println("x: " + x);
-		return x;
+		if (LOGGER.isTraceEnabled()) {
+			LOGGER.trace("Fetching Reference '{}' from {}.{}.", filter,
+					StringUtils.hasText(context.getDatabase()) ? context.getDatabase()
+							: collection.getNamespace().getDatabaseName(),
+					context.getCollection());
+		}
+		return collection.find(filter).first();
 	}
+
+//	@Nullable
+//	@Override
+//	public Document fetch(Document dbRef) {
+//
+//		System.out.println("fetching: " + dbRef);
+//		MongoCollection<Document> collection = MongoDatabaseUtils.getDatabase("manual-reference-tests", mongoDbFactory)
+//				.getCollection("justSomeType", Document.class);
+//
+//		Document x = collection.find(dbRef).first();
+//		System.out.println("x: " + x);
+//		return x;
+//	}
 
 	/*
 	 * (non-Javadoc)
@@ -177,13 +190,20 @@ public class DefaultDbRefResolver implements DbRefResolver {
 					databaseSource.getCollectionName());
 		}
 
-		List<Document> result = mongoCollection //
-				.find(new Document("_id", new Document("$in", ids))) //
-				.into(new ArrayList<>());
+		List<Document> result = bulkFetch(new Document("_id", new Document("$in", ids)), ReferenceContext.fromDBRef(refs.iterator().next()));
 
 		return ids.stream() //
 				.flatMap(id -> documentWithId(id, result)) //
 				.collect(Collectors.toList());
+	}
+
+	@Override
+	public List<Document> bulkFetch(Bson filter, ReferenceContext context) {
+
+		MongoCollection<Document> mongoCollection = getCollection(context);
+
+		return mongoCollection //
+				.find(filter).into(new ArrayList<>());
 	}
 
 	/**
@@ -516,5 +536,11 @@ public class DefaultDbRefResolver implements DbRefResolver {
 
 		return MongoDatabaseUtils.getDatabase(dbref.getDatabaseName(), mongoDbFactory)
 				.getCollection(dbref.getCollectionName(), Document.class);
+	}
+
+	protected MongoCollection<Document> getCollection(ReferenceContext context) {
+
+		return MongoDatabaseUtils.getDatabase(context.database, mongoDbFactory).getCollection(context.collection,
+				Document.class);
 	}
 }

@@ -40,5 +40,7 @@ public @interface ManualReference {
 	 */
 	String db() default "";
 
+	String collection() default "";
+
 	String lookup() default "";
 }

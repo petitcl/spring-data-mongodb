@@ -18,6 +18,8 @@ package org.springframework.data.mongodb.performance;
 import static org.springframework.data.mongodb.core.query.Criteria.*;
 import static org.springframework.data.mongodb.core.query.Query.*;
 
+import org.bson.conversions.Bson;
+import org.springframework.lang.Nullable;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -96,6 +98,23 @@ public class ReactivePerformanceTests {
 		context.afterPropertiesSet();
 
 		converter = new MappingMongoConverter(new DbRefResolver() {
+			@Nullable
+			@Override
+			public Object resolveReference(MongoPersistentProperty property, Object source, ResolutionContext context) {
+				return null;
+			}
+
+			@Nullable
+			@Override
+			public Document fetch(Bson filter, ReferenceContext context) {
+				return null;
+			}
+
+			@Override
+			public Iterable<Document> bulkFetch(Bson filter, ReferenceContext context) {
+				return null;
+			}
+
 			@Override
 			public Object resolveDbRef(MongoPersistentProperty property, DBRef dbref, DbRefResolverCallback callback,
 					DbRefProxyHandler proxyHandler) {

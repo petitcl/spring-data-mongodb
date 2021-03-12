@@ -62,6 +62,7 @@ import org.springframework.data.mapping.model.SpELExpressionEvaluator;
 import org.springframework.data.mapping.model.SpELExpressionParameterValueProvider;
 import org.springframework.data.mongodb.CodecRegistryProvider;
 import org.springframework.data.mongodb.MongoDatabaseFactory;
+import org.springframework.data.mongodb.core.convert.ReferenceResolver.ReferenceContext;
 import org.springframework.data.mongodb.core.mapping.Embedded;
 import org.springframework.data.mongodb.core.mapping.Embedded.OnEmpty;
 import org.springframework.data.mongodb.core.mapping.ManualReference;
@@ -77,6 +78,7 @@ import org.springframework.data.mongodb.util.json.ParameterBindingContext;
 import org.springframework.data.mongodb.util.json.ParameterBindingDocumentCodec;
 import org.springframework.data.mongodb.util.json.ValueProvider;
 import org.springframework.data.util.ClassTypeInformation;
+import org.springframework.data.util.Streamable;
 import org.springframework.data.util.TypeInformation;
 import org.springframework.expression.AccessException;
 import org.springframework.expression.EvaluationContext;
@@ -510,7 +512,11 @@ public class MappingMongoConverter extends AbstractMongoConverter implements App
 				@Nullable
 				@Override
 				public Object getBindableValue(int index) {
-					return null;
+
+					if(value instanceof Document) {
+						return Streamable.of(((Document)value).values()).toList().get(index);
+					}
+					return value;
 				}
 			}, spELContext.getParser(), () -> {
 
@@ -519,15 +525,28 @@ public class MappingMongoConverter extends AbstractMongoConverter implements App
 //					return spELContext.getEvaluationContext(val);
 //				}
 
-				return spELContext.getEvaluationContext(documentAccessor.getDocument());
+				if(value instanceof Document) {
+					return spELContext.getEvaluationContext(value);
+				}
+
+				return spELContext.getEvaluationContext(value);
 			});
 
 
 			ParameterBindingDocumentCodec codec = new ParameterBindingDocumentCodec();
 			Document decoded = codec.decode(lookup, bindingContext);
 
-			Document target = dbRefResolver.fetch(decoded);
-			;
+			if(property.isCollectionLike()) {
+
+				/// ahahahahahahaha
+				// read the collection & database key so maybe an Object toObjectRef
+//				dbRefResolver.bulkFetch(decoded, new ReferenceContext());
+			}
+			Document target = dbRefResolver.fetch(decoded, computeReferenceContext(property, value));
+			if(target == null) {
+				accessor.setProperty(property, null);
+				return;
+			}
 			accessor.setProperty(property, read(property.getTypeInformation(), target));
 			return;
 //			System.out.println("decoded: " + decoded);
@@ -537,6 +556,27 @@ public class MappingMongoConverter extends AbstractMongoConverter implements App
 
 		DBRef dbref = value instanceof DBRef ? (DBRef) value : null;
 		accessor.setProperty(property, dbRefResolver.resolveDbRef(property, dbref, callback, handler));
+	}
+
+	private ReferenceContext computeReferenceContext(MongoPersistentProperty property, Object value) {
+
+		//maybe resolve via spel or dot path notation
+		// if it is spel, handle the result as the colleciton anme
+		// otherwise try to lookup the key.
+
+		if(value instanceof Document) {
+
+			Document ref = (Document)value;
+
+			return new ReferenceContext(ref.getString("db"), ref.get("collection", mappingContext.getPersistentEntity(property.getAssociationTargetType()).getCollection()));
+		}
+
+		if(value instanceof DBRef) {
+			return ReferenceContext.fromDBRef((DBRef)value);
+		}
+
+
+		return new ReferenceContext(null, mappingContext.getPersistentEntity(property.getAssociationTargetType()).getCollection());
 	}
 
 	@Nullable

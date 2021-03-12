@@ -36,6 +36,7 @@ import static org.springframework.data.mongodb.core.query.Query.*;
 
 import lombok.Data;
 
+import java.util.Collections;
 import java.util.List;
 
 import org.bson.Document;
@@ -107,7 +108,10 @@ public class MongoTemplateManualReferenceTests {
 		root.id = "r-1";
 		root.value = "rv-1";
 		root.refValue = justSomeType;
+		root.refValueIndexPlaceholder = justSomeType;
+		root.refValueIndexPlaceholderSpel = justSomeType2;
 		root.refValue2 = justSomeType2;
+//		root.refValueList = Collections.singletonList(justSomeType);
 
 		template.save(root);
 
@@ -121,19 +125,31 @@ public class MongoTemplateManualReferenceTests {
 		@Id String id;
 		String value;
 
-		@ManualReference(lookup = "{ '_id' : '?#{refValue}' }") //
+		@ManualReference(lookup = "{ '_id' : '?#{#this}' }") // vs '?#{refValue}'
 		JustSomeType refValue;
 
-		@ManualReference(lookup = "{ '_id' : '?#{refValue2.id}' }") //
+		@ManualReference(lookup = "{ '_id' : '?0' }") //
+		JustSomeType refValueIndexPlaceholder;
+
+		// TODO: still need to bind the named parameters - sigh - why oh why?
+		@ManualReference(lookup = "{ '_id' : '?#{#this.id}' }") // should this work #{#id}
+		JustSomeType2 refValueIndexPlaceholderSpel;
+
+		@ManualReference(lookup = "{ '_id' : '?#{id}' }") //
 		JustSomeType2 refValue2;
+
+		// ok and we need some sort of list handlign
+		// not working by now
+//		@ManualReference(lookup = "{ '_id' : { $in : ?#{#this} } }")
+//		List<JustSomeType> refValueList;
 	}
 
-	@org.springframework.data.mongodb.core.mapping.Document("justSomeType")
 	interface Identifyable {
 		String getId();
 	}
 
 	@Data
+	@org.springframework.data.mongodb.core.mapping.Document("justSomeType")
 	static class JustSomeType implements Identifyable {
 
 		@Id String id;
@@ -141,6 +157,7 @@ public class MongoTemplateManualReferenceTests {
 	}
 
 	@Data
+	@org.springframework.data.mongodb.core.mapping.Document("justSomeType")
 	static class JustSomeType2 implements Identifyable {
 
 		@Id String id;
@@ -154,7 +171,7 @@ public class MongoTemplateManualReferenceTests {
 		public ObjectReference convert(Identifyable source) {
 
 			if (source instanceof JustSomeType2) {
-				return () -> new Document("collection", "coll-2").append("id", source.getId());
+				return () -> new Document("collection", "justSomeType").append("id", source.getId());
 			}
 			return source::getId;
 		}

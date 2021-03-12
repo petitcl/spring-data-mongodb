@@ -35,7 +35,7 @@ import com.mongodb.DBRef;
  * @author Mark Paluch
  * @since 1.4
  */
-public interface DbRefResolver {
+public interface DbRefResolver extends ReferenceResolver {
 
 	/**
 	 * Resolves the given {@link DBRef} into an object of the given {@link MongoPersistentProperty}'s type. The method
@@ -79,11 +79,6 @@ public interface DbRefResolver {
 	 */
 	@Nullable
 	Document fetch(DBRef dbRef);
-
-	@Nullable
-	default Document fetch(Document dbRef) {
-		return null;
-	}
 
 	/**
 	 * Loads a given {@link List} of {@link DBRef}s from the datasource in one batch. The resulting {@link List} of
