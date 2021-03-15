@@ -125,23 +125,41 @@ public class MongoTemplateManualReferenceTests {
 		@Id String id;
 		String value;
 
-		@ManualReference(lookup = "{ '_id' : '?#{#this}' }") // vs '?#{refValue}'
+
+		/*
+
+		{
+			_id : ..
+			value : ..
+			refValue : id-2
+
+		}
+
+		 */
+		// refValue : id-2 | { id : id-2, col : coll-1 }
+		// _id : ?#{refValue.id}
+
+		@ManualReference(lookup = "{ '_id' : '?#{#this}' }") // vs '?#{refValue}' vs target as variable name
 		JustSomeType refValue;
 
-		@ManualReference(lookup = "{ '_id' : '?0' }") //
+		// refValue : { id : id-2, col : coll-1 }
+		@ManualReference(lookup = "{ '_id' : '?#{id}' }") // vs ?#{#this[id]}
+		JustSomeType2 refValue2;
+
+		@ManualReference(lookup = "{ '_id' : '?0' }") // strange case
 		JustSomeType refValueIndexPlaceholder;
 
 		// TODO: still need to bind the named parameters - sigh - why oh why?
-		@ManualReference(lookup = "{ '_id' : '?#{#this.id}' }") // should this work #{#id}
+		@ManualReference(lookup = "{ '_id' : '?#{#this.id}' }") // should this work #{#id} check also target.id
 		JustSomeType2 refValueIndexPlaceholderSpel;
-
-		@ManualReference(lookup = "{ '_id' : '?#{id}' }") //
-		JustSomeType2 refValue2;
 
 		// ok and we need some sort of list handlign
 		// not working by now
-//		@ManualReference(lookup = "{ '_id' : { $in : ?#{#this} } }")
-//		List<JustSomeType> refValueList;
+
+		// ripple load for single elements { '_id' : '?#{#this}' }
+		// intern concat with OR on Mark you are a genius!!!
+		@ManualReference(lookup = "{ '_id' : { $in : ?#{#this} } }", collection = "#{collection}")
+		List<JustSomeType> refValueList;
 	}
 
 	interface Identifyable {
