@@ -113,6 +113,7 @@ public class DefaultDbRefResolver implements DbRefResolver, ReferenceResolver {
 	@Nullable
 	@Override
 	public Object resolveReference(MongoPersistentProperty property, Object source, ResolutionContext context) {
+
 		return null;
 	}
 
@@ -199,6 +200,10 @@ public class DefaultDbRefResolver implements DbRefResolver, ReferenceResolver {
 
 	@Override
 	public List<Document> bulkFetch(Bson filter, ReferenceContext context) {
+
+		if (LOGGER.isTraceEnabled()) {
+			LOGGER.trace("Bulk fetching {} from {}.{}.", filter, context.getDatabase(), context.getCollection());
+		}
 
 		MongoCollection<Document> mongoCollection = getCollection(context);
 

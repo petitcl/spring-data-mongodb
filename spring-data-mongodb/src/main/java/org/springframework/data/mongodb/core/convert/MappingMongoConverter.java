@@ -97,6 +97,7 @@ import com.mongodb.BasicDBList;
 import com.mongodb.BasicDBObject;
 import com.mongodb.DBObject;
 import com.mongodb.DBRef;
+import org.springframework.util.StringUtils;
 
 /**
  * {@link MongoConverter} that uses a {@link MappingContext} to do sophisticated mapping of domain objects to
@@ -508,6 +509,55 @@ public class MappingMongoConverter extends AbstractMongoConverter implements App
 		if (property.isAnnotationPresent(ManualReference.class)) {
 
 			String lookup = property.getRequiredAnnotation(ManualReference.class).lookup();
+			ParameterBindingDocumentCodec codec = new ParameterBindingDocumentCodec();
+
+			if(property.isCollectionLike() && value instanceof Collection) {
+
+				List<Document> ors = new ArrayList<>();
+
+				ReferenceContext context = null;
+				for(Object entry : (Collection)value) {
+
+					ParameterBindingContext bindingContext = new ParameterBindingContext(new ValueProvider() {
+						@Nullable
+						@Override
+						public Object getBindableValue(int index) {
+
+							if(value instanceof Document) {
+								return Streamable.of(((Document)entry).values()).toList().get(index);
+							}
+							return value;
+						}
+					}, spELContext.getParser(), () -> {
+
+
+						EvaluationContext ctx = spELContext.getEvaluationContext(entry);
+						ctx.setVariable("target", entry);
+						ctx.setVariable(property.getName(), entry);
+
+						return ctx;
+					});
+
+					Document decoded = codec.decode(lookup, bindingContext);
+					ors.add(decoded);
+
+					context = computeReferenceContext(property, value, bindingContext);
+				}
+
+
+				Iterable<Document> target = dbRefResolver.bulkFetch(new Document("$or", ors), context);
+
+				List<Object> targetCollection = new ArrayList<>();
+				for(Document doc : target) {
+					targetCollection.add(read(property.getTypeInformation().getComponentType(), doc));
+				}
+				accessor.setProperty(property, targetCollection);
+				return;
+
+			}
+
+
+
 			ParameterBindingContext bindingContext = new ParameterBindingContext(new ValueProvider() {
 				@Nullable
 				@Override
@@ -520,29 +570,15 @@ public class MappingMongoConverter extends AbstractMongoConverter implements App
 				}
 			}, spELContext.getParser(), () -> {
 
-//				Object val = documentAccessor.get(property);
-//				if(val instanceof Document) {
-//					return spELContext.getEvaluationContext(val);
-//				}
+				EvaluationContext ctx = spELContext.getEvaluationContext(value);
+				ctx.setVariable("target", value);
+				ctx.setVariable(property.getName(), value);
 
-				if(value instanceof Document) {
-					return spELContext.getEvaluationContext(value);
-				}
-
-				return spELContext.getEvaluationContext(value);
+				 return ctx;
 			});
 
-
-			ParameterBindingDocumentCodec codec = new ParameterBindingDocumentCodec();
 			Document decoded = codec.decode(lookup, bindingContext);
-
-			if(property.isCollectionLike()) {
-
-				/// ahahahahahahaha
-				// read the collection & database key so maybe an Object toObjectRef
-//				dbRefResolver.bulkFetch(decoded, new ReferenceContext());
-			}
-			Document target = dbRefResolver.fetch(decoded, computeReferenceContext(property, value));
+			Document target = dbRefResolver.fetch(decoded, computeReferenceContext(property, value, bindingContext));
 			if(target == null) {
 				accessor.setProperty(property, null);
 				return;
@@ -558,7 +594,7 @@ public class MappingMongoConverter extends AbstractMongoConverter implements App
 		accessor.setProperty(property, dbRefResolver.resolveDbRef(property, dbref, callback, handler));
 	}
 
-	private ReferenceContext computeReferenceContext(MongoPersistentProperty property, Object value) {
+	private ReferenceContext computeReferenceContext(MongoPersistentProperty property, Object value, ParameterBindingContext bindingContext) {
 
 		//maybe resolve via spel or dot path notation
 		// if it is spel, handle the result as the colleciton anme
@@ -566,7 +602,20 @@ public class MappingMongoConverter extends AbstractMongoConverter implements App
 
 		if(value instanceof Document) {
 
+
 			Document ref = (Document)value;
+			if (property.isAnnotationPresent(ManualReference.class)) {
+
+				String collection = property.getRequiredAnnotation(ManualReference.class).collection();
+				if(StringUtils.hasText(collection) ) {
+
+					Object coll = bindingContext.evaluateExpression(collection);
+
+					if(coll != null) {
+						return new ReferenceContext(ref.getString("db"), ObjectUtils.nullSafeToString(coll));
+					}
+				}
+			}
 
 			return new ReferenceContext(ref.getString("db"), ref.get("collection", mappingContext.getPersistentEntity(property.getAssociationTargetType()).getCollection()));
 		}
