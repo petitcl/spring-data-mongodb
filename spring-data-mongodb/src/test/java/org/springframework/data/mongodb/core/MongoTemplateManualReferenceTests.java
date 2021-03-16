@@ -42,8 +42,6 @@ import java.util.Collections;
 import java.util.List;
 
 import org.bson.Document;
-import org.bson.json.JsonMode;
-import org.bson.json.JsonWriterSettings;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -53,9 +51,6 @@ import org.springframework.data.mongodb.core.mapping.DBRef;
 import org.springframework.data.mongodb.core.mapping.Field;
 import org.springframework.data.mongodb.core.mapping.ManualReference;
 import org.springframework.data.mongodb.core.mapping.ObjectReference;
-import org.springframework.data.mongodb.core.query.Criteria;
-import org.springframework.data.mongodb.core.query.Query;
-import org.springframework.data.mongodb.core.query.SerializationUtils;
 import org.springframework.data.mongodb.test.util.Client;
 import org.springframework.data.mongodb.test.util.MongoClientExtension;
 import org.springframework.data.mongodb.test.util.MongoTestTemplate;
@@ -84,7 +79,6 @@ public class MongoTemplateManualReferenceTests {
 		});
 
 		cfg.configureConversion(it -> {
-			it.customConverters(new ManualReferenceConverter());
 			it.customConverters(new ReferencableConverter());
 		});
 
@@ -123,7 +117,8 @@ public class MongoTemplateManualReferenceTests {
 		String rootCollectionName = template.getCollectionName(CollectionRefRoot.class);
 		String refCollectionName = template.getCollectionName(SimpleObjectRef.class);
 		org.bson.Document refSource = new Document("_id", "ref-1").append("value", "me-the-referenced-object");
-		org.bson.Document source = new Document("_id", "id-1").append("value", "v1").append("simpleValueRef", Collections.singletonList("ref-1"));
+		org.bson.Document source = new Document("_id", "id-1").append("value", "v1").append("simpleValueRef",
+				Collections.singletonList("ref-1"));
 
 		template.execute(db -> {
 
@@ -135,7 +130,6 @@ public class MongoTemplateManualReferenceTests {
 		CollectionRefRoot result = template.findOne(query(where("id").is("id-1")), CollectionRefRoot.class);
 		assertThat(result.getSimpleValueRef()).containsExactly(new SimpleObjectRef("ref-1", "me-the-referenced-object"));
 	}
-
 
 	@Test
 	void readSimpleTypeObjectReferenceFromFieldWithCustomName() {
@@ -159,6 +153,27 @@ public class MongoTemplateManualReferenceTests {
 	}
 
 	@Test
+	void readCollectionTypeObjectReferenceFromFieldWithCustomName() {
+
+		String rootCollectionName = template.getCollectionName(CollectionRefRoot.class);
+		String refCollectionName = template.getCollectionName(SimpleObjectRef.class);
+		org.bson.Document refSource = new Document("_id", "ref-1").append("value", "me-the-referenced-object");
+		org.bson.Document source = new Document("_id", "id-1").append("value", "v1")
+				.append("simple-value-ref-annotated-field-name", Collections.singletonList("ref-1"));
+
+		template.execute(db -> {
+
+			db.getCollection(refCollectionName).insertOne(refSource);
+			db.getCollection(rootCollectionName).insertOne(source);
+			return null;
+		});
+
+		CollectionRefRoot result = template.findOne(query(where("id").is("id-1")), CollectionRefRoot.class);
+		assertThat(result.getSimpleValueRefWithAnnotatedFieldName())
+				.containsExactly(new SimpleObjectRef("ref-1", "me-the-referenced-object"));
+	}
+
+	@Test
 	void readObjectReferenceFromDocumentType() {
 
 		String rootCollectionName = template.getCollectionName(SingleRefRoot.class);
@@ -176,6 +191,27 @@ public class MongoTemplateManualReferenceTests {
 
 		SingleRefRoot result = template.findOne(query(where("id").is("id-1")), SingleRefRoot.class);
 		assertThat(result.getObjectValueRef()).isEqualTo(new ObjectRefOfDocument("ref-1", "me-the-referenced-object"));
+	}
+
+	@Test
+	void readCollectionObjectReferenceFromDocumentType() {
+
+		String rootCollectionName = template.getCollectionName(CollectionRefRoot.class);
+		String refCollectionName = template.getCollectionName(ObjectRefOfDocument.class);
+		org.bson.Document refSource = new Document("_id", "ref-1").append("value", "me-the-referenced-object");
+		org.bson.Document source = new Document("_id", "id-1").append("value", "v1").append("objectValueRef",
+				Collections.singletonList(new Document("id", "ref-1").append("property", "without-any-meaning")));
+
+		template.execute(db -> {
+
+			db.getCollection(refCollectionName).insertOne(refSource);
+			db.getCollection(rootCollectionName).insertOne(source);
+			return null;
+		});
+
+		CollectionRefRoot result = template.findOne(query(where("id").is("id-1")), CollectionRefRoot.class);
+		assertThat(result.getObjectValueRef())
+				.containsExactly(new ObjectRefOfDocument("ref-1", "me-the-referenced-object"));
 	}
 
 	@Test
@@ -202,6 +238,30 @@ public class MongoTemplateManualReferenceTests {
 	}
 
 	@Test
+	void readCollectionObjectReferenceFromDocumentDeclaringCollectionName() {
+
+		String rootCollectionName = template.getCollectionName(CollectionRefRoot.class);
+		String refCollectionName = "object-ref-of-document-with-embedded-collection-name";
+		org.bson.Document refSource = new Document("_id", "ref-1").append("value", "me-the-referenced-object");
+		org.bson.Document source = new Document("_id", "id-1").append("value", "v1").append(
+				"objectValueRefWithEmbeddedCollectionName",
+				Collections.singletonList(
+						new Document("id", "ref-1").append("collection", "object-ref-of-document-with-embedded-collection-name")
+								.append("property", "without-any-meaning")));
+
+		template.execute(db -> {
+
+			db.getCollection(refCollectionName).insertOne(refSource);
+			db.getCollection(rootCollectionName).insertOne(source);
+			return null;
+		});
+
+		CollectionRefRoot result = template.findOne(query(where("id").is("id-1")), CollectionRefRoot.class);
+		assertThat(result.getObjectValueRefWithEmbeddedCollectionName())
+				.containsExactly(new ObjectRefOfDocumentWithEmbeddedCollectionName("ref-1", "me-the-referenced-object"));
+	}
+
+	@Test
 	void readObjectReferenceFromDocumentNotRelatingToTheIdProperty() {
 
 		String rootCollectionName = template.getCollectionName(SingleRefRoot.class);
@@ -224,75 +284,26 @@ public class MongoTemplateManualReferenceTests {
 	}
 
 	@Test
-	void xxx() {
+	void readCollectionObjectReferenceFromDocumentNotRelatingToTheIdProperty() {
 
-		JustSomeType justSomeType = new JustSomeType();
-		justSomeType.id = "id-1";
-		justSomeType.value = "v-1";
+		String rootCollectionName = template.getCollectionName(CollectionRefRoot.class);
+		String refCollectionName = template.getCollectionName(ObjectRefOnNonIdField.class);
+		org.bson.Document refSource = new Document("_id", "ref-1").append("refKey1", "ref-key-1")
+				.append("refKey2", "ref-key-2").append("value", "me-the-referenced-object");
+		org.bson.Document source = new Document("_id", "id-1").append("value", "v1").append("objectValueRefOnNonIdFields",
+				Collections.singletonList(new Document("refKey1", "ref-key-1").append("refKey2", "ref-key-2").append("property",
+						"without-any-meaning")));
 
-		template.save(justSomeType);
+		template.execute(db -> {
 
-		JustSomeType2 justSomeType2 = new JustSomeType2();
-		justSomeType2.id = "t2";
-		justSomeType2.value = "v-2";
+			db.getCollection(refCollectionName).insertOne(refSource);
+			db.getCollection(rootCollectionName).insertOne(source);
+			return null;
+		});
 
-		template.save(justSomeType2);
-
-		Root root = new Root();
-		root.id = "r-1";
-		root.value = "rv-1";
-		root.refValue = justSomeType;
-		root.refValueIndexPlaceholder = justSomeType;
-		root.refValueIndexPlaceholderSpel = justSomeType2;
-		root.refValue2 = justSomeType2;
-		// root.refValueList = Collections.singletonList(justSomeType);
-
-		template.save(root);
-
-		List<Root> result = template.find(query(where("id").is(root.id)), Root.class);
-		System.out.println("result: " + result);
-	}
-
-	@Data
-	static class Root {
-
-		@Id String id;
-		String value;
-
-		/*
-		
-		{
-			_id : ..
-			value : ..
-			refValue : id-2
-		
-		}
-		
-		 */
-		// refValue : id-2 | { id : id-2, col : coll-1 }
-		// _id : ?#{refValue.id}
-
-		@ManualReference(lookup = "{ '_id' : '?#{#refValue}' }") // vs '?#{refValue}' vs target as variable name
-		JustSomeType refValue;
-
-		// refValue : { id : id-2, col : coll-1 }
-		@ManualReference(lookup = "{ '_id' : '?#{id}' }") // vs ?#{#this[id]}
-		JustSomeType2 refValue2;
-
-		@ManualReference(lookup = "{ '_id' : '?0' }") // strange case
-		JustSomeType refValueIndexPlaceholder;
-
-		// TODO: still need to bind the named parameters - sigh - why oh why?
-		@ManualReference(lookup = "{ '_id' : '?#{#target.id}' }") // should this work #{#id} check also target.id
-		JustSomeType2 refValueIndexPlaceholderSpel;
-
-		// ok and we need some sort of list handlign
-		// not working by now
-
-		// ripple load for single elements { '_id' : '?#{#this}' }
-		// intern concat with OR on Mark you are a genius!!!
-		@ManualReference(lookup = "{ '_id' : { $in : ?#{#this} } }",
-				collection = "#{collection}") List<JustSomeType> refValueList;
+		CollectionRefRoot result = template.findOne(query(where("id").is("id-1")), CollectionRefRoot.class);
+		assertThat(result.getObjectValueRefOnNonIdFields())
+				.containsExactly(new ObjectRefOnNonIdField("ref-1", "me-the-referenced-object", "ref-key-1", "ref-key-2"));
 	}
 
 	@Data
@@ -327,20 +338,17 @@ public class MongoTemplateManualReferenceTests {
 		@ManualReference(lookup = "{ '_id' : '?#{#target}' }") //
 		List<SimpleObjectRef> simpleValueRef;
 
-		@Field("simple-value-ref-annotated-field-name") @ManualReference(
-				lookup = "{ '_id' : '?#{#target}' }") List<SimpleObjectRef> simpleValueRefWithAnnotatedFieldName;
+		@Field("simple-value-ref-annotated-field-name") @ManualReference(lookup = "{ '_id' : '?#{#target}' }") //
+		List<SimpleObjectRef> simpleValueRefWithAnnotatedFieldName;
 
-		@ManualReference(lookup = "{ '_id' : '?#{id}' }") List<ObjectRefOfDocument> objectValueRef;
+		@ManualReference(lookup = "{ '_id' : '?#{id}' }") //
+		List<ObjectRefOfDocument> objectValueRef;
 
-		@ManualReference(lookup = "{ '_id' : '?#{id}' }",
-				collection = "?#{collection}") List<ObjectRefOfDocumentWithEmbeddedCollectionName> objectValueRefWithEmbeddedDocumentName;
+		@ManualReference(lookup = "{ '_id' : '?#{id}' }", collection = "?#{collection}") //
+		List<ObjectRefOfDocumentWithEmbeddedCollectionName> objectValueRefWithEmbeddedCollectionName;
 
-		@ManualReference(
-				lookup = "{ 'refKey1' : '?#{ref-key-1}', 'refKey2' : '?#{ref-key-2}' }") List<ObjectRefOnNonIdField> objectValueRefOnNonIdFields;
-	}
-
-	interface Identifyable {
-		String getId();
+		@ManualReference(lookup = "{ 'refKey1' : '?#{refKey1}', 'refKey2' : '?#{refKey2}' }") //
+		List<ObjectRefOnNonIdField> objectValueRefOnNonIdFields;
 	}
 
 	@FunctionalInterface
@@ -400,35 +408,6 @@ public class MongoTemplateManualReferenceTests {
 		@Override
 		public Object toReference() {
 			return new Document("refKey1", refKey1).append("refKey2", refKey2);
-		}
-	}
-
-	@Data
-	@org.springframework.data.mongodb.core.mapping.Document("justSomeType")
-	static class JustSomeType implements Identifyable {
-
-		@Id String id;
-		String value;
-	}
-
-	@Data
-	@org.springframework.data.mongodb.core.mapping.Document("justSomeType")
-	static class JustSomeType2 implements Identifyable {
-
-		@Id String id;
-		String value;
-	}
-
-	static class ManualReferenceConverter implements Converter<Identifyable, ObjectReference> {
-
-		@Nullable
-		@Override
-		public ObjectReference convert(Identifyable source) {
-
-			if (source instanceof JustSomeType2) {
-				return () -> new Document("collection", "justSomeType").append("id", source.getId());
-			}
-			return source::getId;
 		}
 	}
 

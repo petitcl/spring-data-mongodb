@@ -541,7 +541,7 @@ public class MappingMongoConverter extends AbstractMongoConverter implements App
 					Document decoded = codec.decode(lookup, bindingContext);
 					ors.add(decoded);
 
-					context = computeReferenceContext(property, value, bindingContext);
+					context = computeReferenceContext(property, entry, bindingContext);
 				}
 
 
@@ -553,10 +553,7 @@ public class MappingMongoConverter extends AbstractMongoConverter implements App
 				}
 				accessor.setProperty(property, targetCollection);
 				return;
-
 			}
-
-
 
 			ParameterBindingContext bindingContext = new ParameterBindingContext(new ValueProvider() {
 				@Nullable
@@ -609,7 +606,14 @@ public class MappingMongoConverter extends AbstractMongoConverter implements App
 				String collection = property.getRequiredAnnotation(ManualReference.class).collection();
 				if(StringUtils.hasText(collection) ) {
 
-					Object coll = bindingContext.evaluateExpression(collection);
+					Object coll = collection;
+
+					if(!BsonUtils.isJsonDocument(collection) && collection.contains("?#{")) {
+						String s = "{ 'target-collection' : " + collection + "}";
+						coll = new ParameterBindingDocumentCodec().decode(s, bindingContext).getString("target-collection");
+					} else {
+						coll = bindingContext.evaluateExpression(collection);
+					}
 
 					if(coll != null) {
 						return new ReferenceContext(ref.getString("db"), ObjectUtils.nullSafeToString(coll));

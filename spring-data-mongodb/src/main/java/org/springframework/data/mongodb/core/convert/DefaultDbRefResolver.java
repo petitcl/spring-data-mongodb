@@ -201,11 +201,11 @@ public class DefaultDbRefResolver implements DbRefResolver, ReferenceResolver {
 	@Override
 	public List<Document> bulkFetch(Bson filter, ReferenceContext context) {
 
-		if (LOGGER.isTraceEnabled()) {
-			LOGGER.trace("Bulk fetching {} from {}.{}.", filter, context.getDatabase(), context.getCollection());
-		}
-
 		MongoCollection<Document> mongoCollection = getCollection(context);
+
+		if (LOGGER.isTraceEnabled()) {
+			LOGGER.trace("Bulk fetching {} from {}.{}.", filter, mongoCollection.getNamespace().getDatabaseName(), context.getCollection());
+		}
 
 		return mongoCollection //
 				.find(filter).into(new ArrayList<>());
