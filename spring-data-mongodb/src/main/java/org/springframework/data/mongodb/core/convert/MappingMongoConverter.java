@@ -62,7 +62,6 @@ import org.springframework.data.mapping.model.SpELExpressionEvaluator;
 import org.springframework.data.mapping.model.SpELExpressionParameterValueProvider;
 import org.springframework.data.mongodb.CodecRegistryProvider;
 import org.springframework.data.mongodb.MongoDatabaseFactory;
-import org.springframework.data.mongodb.core.convert.ReferenceResolver.ReferenceContext;
 import org.springframework.data.mongodb.core.mapping.Embedded;
 import org.springframework.data.mongodb.core.mapping.Embedded.OnEmpty;
 import org.springframework.data.mongodb.core.mapping.ManualReference;
@@ -74,19 +73,8 @@ import org.springframework.data.mongodb.core.mapping.event.AfterConvertEvent;
 import org.springframework.data.mongodb.core.mapping.event.AfterLoadEvent;
 import org.springframework.data.mongodb.core.mapping.event.MongoMappingEvent;
 import org.springframework.data.mongodb.util.BsonUtils;
-import org.springframework.data.mongodb.util.json.ParameterBindingContext;
-import org.springframework.data.mongodb.util.json.ParameterBindingDocumentCodec;
-import org.springframework.data.mongodb.util.json.ValueProvider;
 import org.springframework.data.util.ClassTypeInformation;
-import org.springframework.data.util.Streamable;
 import org.springframework.data.util.TypeInformation;
-import org.springframework.expression.AccessException;
-import org.springframework.expression.EvaluationContext;
-import org.springframework.expression.PropertyAccessor;
-import org.springframework.expression.TypedValue;
-import org.springframework.expression.spel.support.SimpleEvaluationContext;
-import org.springframework.expression.spel.support.SimpleEvaluationContext.Builder;
-import org.springframework.expression.spel.support.StandardEvaluationContext;
 import org.springframework.lang.Nullable;
 import org.springframework.util.Assert;
 import org.springframework.util.ClassUtils;
@@ -97,7 +85,6 @@ import com.mongodb.BasicDBList;
 import com.mongodb.BasicDBObject;
 import com.mongodb.DBObject;
 import com.mongodb.DBRef;
-import org.springframework.util.StringUtils;
 
 /**
  * {@link MongoConverter} that uses a {@link MappingContext} to do sophisticated mapping of domain objects to
@@ -126,6 +113,7 @@ public class MappingMongoConverter extends AbstractMongoConverter implements App
 	protected final QueryMapper idMapper;
 	protected final DbRefResolver dbRefResolver;
 	protected final DefaultDbRefProxyHandler dbRefProxyHandler;
+	protected final ReferenceReader referenceReader;
 
 	protected @Nullable ApplicationContext applicationContext;
 	protected MongoTypeMapper typeMapper;
@@ -162,6 +150,7 @@ public class MappingMongoConverter extends AbstractMongoConverter implements App
 					ConversionContext context = getConversionContext(path);
 					return MappingMongoConverter.this.getValueInternal(context, prop, bson, evaluator);
 				});
+		this.referenceReader = new ReferenceReader(mappingContext, (prop, document) -> this.read(prop.getActualType(), document), () -> spELContext);
 	}
 
 	/**
@@ -508,128 +497,16 @@ public class MappingMongoConverter extends AbstractMongoConverter implements App
 
 		if (property.isAnnotationPresent(ManualReference.class)) {
 
-			String lookup = property.getRequiredAnnotation(ManualReference.class).lookup();
-			ParameterBindingDocumentCodec codec = new ParameterBindingDocumentCodec();
-
-			if(property.isCollectionLike() && value instanceof Collection) {
-
-				List<Document> ors = new ArrayList<>();
-
-				ReferenceContext context = null;
-				for(Object entry : (Collection)value) {
-
-					ParameterBindingContext bindingContext = new ParameterBindingContext(new ValueProvider() {
-						@Nullable
-						@Override
-						public Object getBindableValue(int index) {
-
-							if(value instanceof Document) {
-								return Streamable.of(((Document)entry).values()).toList().get(index);
-							}
-							return value;
-						}
-					}, spELContext.getParser(), () -> {
-
-
-						EvaluationContext ctx = spELContext.getEvaluationContext(entry);
-						ctx.setVariable("target", entry);
-						ctx.setVariable(property.getName(), entry);
-
-						return ctx;
-					});
-
-					Document decoded = codec.decode(lookup, bindingContext);
-					ors.add(decoded);
-
-					context = computeReferenceContext(property, entry, bindingContext);
-				}
-
-
-				Iterable<Document> target = dbRefResolver.bulkFetch(new Document("$or", ors), context);
-
-				List<Object> targetCollection = new ArrayList<>();
-				for(Document doc : target) {
-					targetCollection.add(read(property.getTypeInformation().getComponentType(), doc));
-				}
-				accessor.setProperty(property, targetCollection);
-				return;
-			}
-
-			ParameterBindingContext bindingContext = new ParameterBindingContext(new ValueProvider() {
-				@Nullable
-				@Override
-				public Object getBindableValue(int index) {
-
-					if(value instanceof Document) {
-						return Streamable.of(((Document)value).values()).toList().get(index);
-					}
-					return value;
-				}
-			}, spELContext.getParser(), () -> {
-
-				EvaluationContext ctx = spELContext.getEvaluationContext(value);
-				ctx.setVariable("target", value);
-				ctx.setVariable(property.getName(), value);
-
-				 return ctx;
+			Object targetValue = referenceReader.readReference(property, value, (ctx, filter) -> {
+				return dbRefResolver.bulkFetch(filter, ctx);
 			});
 
-			Document decoded = codec.decode(lookup, bindingContext);
-			Document target = dbRefResolver.fetch(decoded, computeReferenceContext(property, value, bindingContext));
-			if(target == null) {
-				accessor.setProperty(property, null);
-				return;
-			}
-			accessor.setProperty(property, read(property.getTypeInformation(), target));
+			accessor.setProperty(property, targetValue);
 			return;
-//			System.out.println("decoded: " + decoded);
-			// codec.decode(lookup, ParameterBindingContext.forExpressions(value, spELContext.getParser(),
-			// documentAccessor.getDocument())
 		}
 
 		DBRef dbref = value instanceof DBRef ? (DBRef) value : null;
 		accessor.setProperty(property, dbRefResolver.resolveDbRef(property, dbref, callback, handler));
-	}
-
-	private ReferenceContext computeReferenceContext(MongoPersistentProperty property, Object value, ParameterBindingContext bindingContext) {
-
-		//maybe resolve via spel or dot path notation
-		// if it is spel, handle the result as the colleciton anme
-		// otherwise try to lookup the key.
-
-		if(value instanceof Document) {
-
-
-			Document ref = (Document)value;
-			if (property.isAnnotationPresent(ManualReference.class)) {
-
-				String collection = property.getRequiredAnnotation(ManualReference.class).collection();
-				if(StringUtils.hasText(collection) ) {
-
-					Object coll = collection;
-
-					if(!BsonUtils.isJsonDocument(collection) && collection.contains("?#{")) {
-						String s = "{ 'target-collection' : " + collection + "}";
-						coll = new ParameterBindingDocumentCodec().decode(s, bindingContext).getString("target-collection");
-					} else {
-						coll = bindingContext.evaluateExpression(collection);
-					}
-
-					if(coll != null) {
-						return new ReferenceContext(ref.getString("db"), ObjectUtils.nullSafeToString(coll));
-					}
-				}
-			}
-
-			return new ReferenceContext(ref.getString("db"), ref.get("collection", mappingContext.getPersistentEntity(property.getAssociationTargetType()).getCollection()));
-		}
-
-		if(value instanceof DBRef) {
-			return ReferenceContext.fromDBRef((DBRef)value);
-		}
-
-
-		return new ReferenceContext(null, mappingContext.getPersistentEntity(property.getAssociationTargetType()).getCollection());
 	}
 
 	@Nullable
@@ -1673,9 +1550,10 @@ public class MappingMongoConverter extends AbstractMongoConverter implements App
 	}
 
 	@SuppressWarnings("ConstantConditions")
-	private <T extends Object> T doConvert(Object value, Class<? extends T> target, @Nullable Class<? extends T> fallback) {
+	private <T extends Object> T doConvert(Object value, Class<? extends T> target,
+			@Nullable Class<? extends T> fallback) {
 
-		if(conversionService.canConvert(value.getClass(), target) || fallback == null) {
+		if (conversionService.canConvert(value.getClass(), target) || fallback == null) {
 			return conversionService.convert(value, target);
 		}
 		return conversionService.convert(value, fallback);

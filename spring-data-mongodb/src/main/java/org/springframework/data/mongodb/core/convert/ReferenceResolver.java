@@ -52,7 +52,7 @@ public interface ReferenceResolver {
 	@Nullable
 	Document fetch(Bson filter, ReferenceContext context);
 
-	Iterable<Document> bulkFetch(Bson filter, ReferenceContext context);
+	Streamable<Document> bulkFetch(Bson filter, ReferenceContext context);
 
 	class ReferenceContext {
 

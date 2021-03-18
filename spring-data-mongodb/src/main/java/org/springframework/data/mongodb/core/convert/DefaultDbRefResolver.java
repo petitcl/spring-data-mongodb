@@ -191,7 +191,7 @@ public class DefaultDbRefResolver implements DbRefResolver, ReferenceResolver {
 					databaseSource.getCollectionName());
 		}
 
-		List<Document> result = bulkFetch(new Document("_id", new Document("$in", ids)), ReferenceContext.fromDBRef(refs.iterator().next()));
+		List<Document> result = bulkFetch(new Document("_id", new Document("$in", ids)), ReferenceContext.fromDBRef(refs.iterator().next())).toList();
 
 		return ids.stream() //
 				.flatMap(id -> documentWithId(id, result)) //
@@ -199,7 +199,7 @@ public class DefaultDbRefResolver implements DbRefResolver, ReferenceResolver {
 	}
 
 	@Override
-	public List<Document> bulkFetch(Bson filter, ReferenceContext context) {
+	public Streamable<Document> bulkFetch(Bson filter, ReferenceContext context) {
 
 		MongoCollection<Document> mongoCollection = getCollection(context);
 
@@ -207,8 +207,8 @@ public class DefaultDbRefResolver implements DbRefResolver, ReferenceResolver {
 			LOGGER.trace("Bulk fetching {} from {}.{}.", filter, mongoCollection.getNamespace().getDatabaseName(), context.getCollection());
 		}
 
-		return mongoCollection //
-				.find(filter).into(new ArrayList<>());
+		return Streamable.of(mongoCollection //
+				.find(filter));
 	}
 
 	/**

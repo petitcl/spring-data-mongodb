@@ -20,7 +20,9 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
+import java.util.Iterator;
 
 import org.bson.Document;
 import org.bson.types.ObjectId;
@@ -33,14 +35,16 @@ import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
-
 import org.springframework.dao.InvalidDataAccessApiUsageException;
 import org.springframework.data.mongodb.MongoDatabaseFactory;
 import org.springframework.data.mongodb.core.DocumentTestUtils;
 
 import com.mongodb.DBRef;
+import com.mongodb.ServerAddress;
+import com.mongodb.ServerCursor;
 import com.mongodb.client.FindIterable;
 import com.mongodb.client.MongoCollection;
+import com.mongodb.client.MongoCursor;
 import com.mongodb.client.MongoDatabase;
 
 /**
@@ -65,6 +69,7 @@ class DefaultDbRefResolverUnitTests {
 		when(factoryMock.getMongoDatabase()).thenReturn(dbMock);
 		when(dbMock.getCollection(anyString(), any(Class.class))).thenReturn(collectionMock);
 		when(collectionMock.find(any(Document.class))).thenReturn(cursorMock);
+		when(cursorMock.iterator()).thenReturn(cursorFrom(Collections.emptyList()));
 
 		resolver = new DefaultDbRefResolver(factoryMock);
 	}
@@ -115,7 +120,7 @@ class DefaultDbRefResolverUnitTests {
 		DBRef ref1 = new DBRef("collection-1", o1.get("_id"));
 		DBRef ref2 = new DBRef("collection-1", o2.get("_id"));
 
-		when(cursorMock.into(any())).then(invocation -> Arrays.asList(o2, o1));
+		when(cursorMock.iterator()).thenReturn(cursorFrom(Arrays.asList(o2, o1)));
 
 		assertThat(resolver.bulkFetch(Arrays.asList(ref1, ref2))).containsExactly(o1, o2);
 	}
@@ -128,8 +133,46 @@ class DefaultDbRefResolverUnitTests {
 		DBRef ref1 = new DBRef("collection-1", document.get("_id"));
 		DBRef ref2 = new DBRef("collection-1", document.get("_id"));
 
-		when(cursorMock.into(any())).then(invocation -> Arrays.asList(document));
+		when(cursorMock.iterator()).thenReturn(cursorFrom(Arrays.asList(document)));
 
 		assertThat(resolver.bulkFetch(Arrays.asList(ref1, ref2))).containsExactly(document, document);
+	}
+
+	private MongoCursor<Document> cursorFrom(Collection<Document> source) {
+
+		return new MongoCursor() {
+
+			private Iterator<Document> it = source.iterator();
+
+			@Override
+			public void close() {
+
+			}
+
+			@Override
+			public boolean hasNext() {
+				return it.hasNext();
+			}
+
+			@Override
+			public Object next() {
+				return it.next();
+			}
+
+			@Override
+			public Object tryNext() {
+				return it.next();
+			}
+
+			@Override
+			public ServerCursor getServerCursor() {
+				return null;
+			}
+
+			@Override
+			public ServerAddress getServerAddress() {
+				return null;
+			}
+		};
 	}
 }

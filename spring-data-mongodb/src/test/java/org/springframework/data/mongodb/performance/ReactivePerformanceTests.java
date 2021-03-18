@@ -19,6 +19,7 @@ import static org.springframework.data.mongodb.core.query.Criteria.*;
 import static org.springframework.data.mongodb.core.query.Query.*;
 
 import org.bson.conversions.Bson;
+import org.springframework.data.util.Streamable;
 import org.springframework.lang.Nullable;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -111,7 +112,7 @@ public class ReactivePerformanceTests {
 			}
 
 			@Override
-			public Iterable<Document> bulkFetch(Bson filter, ReferenceContext context) {
+			public Streamable<Document> bulkFetch(Bson filter, ReferenceContext context) {
 				return null;
 			}
 

@@ -42,5 +42,5 @@ public @interface ManualReference {
 
 	String collection() default "";
 
-	String lookup() default "";
+	String lookup() default "{ '_id' : ?#{#target} }";
 }
