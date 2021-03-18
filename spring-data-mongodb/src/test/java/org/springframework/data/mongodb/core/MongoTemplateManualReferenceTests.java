@@ -132,6 +132,25 @@ public class MongoTemplateManualReferenceTests {
 	}
 
 	@Test
+	void readLazySimpleTypeObjectReference() {
+
+		String rootCollectionName = template.getCollectionName(SingleRefRoot.class);
+		String refCollectionName = template.getCollectionName(SimpleObjectRef.class);
+		org.bson.Document refSource = new Document("_id", "ref-1").append("value", "me-the-referenced-object");
+		org.bson.Document source = new Document("_id", "id-1").append("value", "v1").append("simpleLazyValueRef", "ref-1");
+
+		template.execute(db -> {
+
+			db.getCollection(refCollectionName).insertOne(refSource);
+			db.getCollection(rootCollectionName).insertOne(source);
+			return null;
+		});
+
+		SingleRefRoot result = template.findOne(query(where("id").is("id-1")), SingleRefRoot.class);
+		assertThat(result.getSimpleLazyValueRef()).isEqualTo(new SimpleObjectRef("ref-1", "me-the-referenced-object"));
+	}
+
+	@Test
 	void readSimpleTypeObjectReferenceFromFieldWithCustomName() {
 
 		String rootCollectionName = template.getCollectionName(SingleRefRoot.class);
@@ -314,6 +333,9 @@ public class MongoTemplateManualReferenceTests {
 
 		@ManualReference(lookup = "{ '_id' : '?#{#target}' }") //
 		SimpleObjectRef simpleValueRef;
+
+		@ManualReference(lookup = "{ '_id' : '?#{#target}' }", lazy = true) //
+		SimpleObjectRef simpleLazyValueRef;
 
 		@Field("simple-value-ref-annotated-field-name") //
 		@ManualReference(lookup = "{ '_id' : '?#{#target}' }") //

@@ -49,6 +49,7 @@ import org.springframework.data.mongodb.util.BsonUtils;
 import org.springframework.data.mongodb.util.json.ParameterBindingContext;
 import org.springframework.data.mongodb.util.json.ParameterBindingDocumentCodec;
 import org.springframework.data.mongodb.util.json.ValueProvider;
+import org.springframework.data.util.Lazy;
 import org.springframework.data.util.Streamable;
 import org.springframework.expression.EvaluationContext;
 import org.springframework.util.ObjectUtils;
@@ -64,23 +65,32 @@ public class ReferenceReader {
 
 	private final ParameterBindingDocumentCodec codec;
 
-	MappingContext<? extends MongoPersistentEntity<?>, MongoPersistentProperty> mappingContext;
+	Lazy<MappingContext<? extends MongoPersistentEntity<?>, MongoPersistentProperty>> mappingContext;
 	BiFunction<MongoPersistentProperty, Document, Object> documentConversionFunction;
-	Supplier<SpELContext> spelContextProvider;
+	Supplier<SpELContext> spelContextSupplier;
 
 	public ReferenceReader(MappingContext<? extends MongoPersistentEntity<?>, MongoPersistentProperty> mappingContext,
 			BiFunction<MongoPersistentProperty, Document, Object> documentConversionFunction,
-			Supplier<SpELContext> spelContextProvider) {
+			Supplier<SpELContext> spelContextSupplier) {
 
-		this.mappingContext = mappingContext;
+		this(() -> mappingContext, documentConversionFunction, spelContextSupplier);
+	}
+
+	public ReferenceReader(
+			Supplier<MappingContext<? extends MongoPersistentEntity<?>, MongoPersistentProperty>> mappingContextSupplier,
+			BiFunction<MongoPersistentProperty, Document, Object> documentConversionFunction,
+			Supplier<SpELContext> spelContextSupplier) {
+
+		this.mappingContext = Lazy.of(mappingContextSupplier);
 		this.documentConversionFunction = documentConversionFunction;
-		this.spelContextProvider = spelContextProvider;
+		this.spelContextSupplier = spelContextSupplier;
 		this.codec = new ParameterBindingDocumentCodec();
 	}
 
-	Object readReference(MongoPersistentProperty property, Object value, BiFunction<ReferenceContext, Bson, Streamable<Document>> lookupFunction) {
+	Object readReference(MongoPersistentProperty property, Object value,
+			BiFunction<ReferenceContext, Bson, Streamable<Document>> lookupFunction) {
 
-		SpELContext spELContext = spelContextProvider.get();
+		SpELContext spELContext = spelContextSupplier.get();
 
 		Document filter = computeFilter(property, value, spELContext);
 		ReferenceContext referenceContext = computeReferenceContext(property, value, spELContext);
@@ -126,7 +136,7 @@ public class ReferenceReader {
 			}
 
 			return new ReferenceContext(ref.getString("db"), ref.get("collection",
-					mappingContext.getPersistentEntity(property.getAssociationTargetType()).getCollection()));
+					mappingContext.get().getPersistentEntity(property.getAssociationTargetType()).getCollection()));
 		}
 
 		if (value instanceof DBRef) {
@@ -134,7 +144,7 @@ public class ReferenceReader {
 		}
 
 		return new ReferenceContext(null,
-				mappingContext.getPersistentEntity(property.getAssociationTargetType()).getCollection());
+				mappingContext.get().getPersistentEntity(property.getAssociationTargetType()).getCollection());
 	}
 
 	ParameterBindingContext bindingContext(MongoPersistentProperty property, Object source, SpELContext spELContext) {

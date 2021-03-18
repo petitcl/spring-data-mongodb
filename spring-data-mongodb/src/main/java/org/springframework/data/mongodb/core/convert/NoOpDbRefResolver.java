@@ -16,6 +16,7 @@
 package org.springframework.data.mongodb.core.convert;
 
 import java.util.List;
+import java.util.function.BiFunction;
 
 import org.bson.Document;
 import org.bson.conversions.Bson;
@@ -74,19 +75,12 @@ public enum NoOpDbRefResolver implements DbRefResolver {
 
 	@Nullable
 	@Override
-	public Object resolveReference(MongoPersistentProperty property, Object source, ResolutionContext context) {
-		return handle();
-	}
-
-	@Nullable
-	@Override
-	public Document fetch(Bson filter, ReferenceContext context) {
-		return handle();
-	}
-
-	@Override
-	public Streamable<Document> bulkFetch(Bson filter, ReferenceContext context) {
+	public Object resolveReference(MongoPersistentProperty property, Object source, BiFunction<ReferenceContext, Bson, Streamable<Document>> lookupFunction) {
 		return null;
 	}
 
+	@Override
+	public ReferenceLoader getReferenceLoader() {
+		return handle();
+	}
 }

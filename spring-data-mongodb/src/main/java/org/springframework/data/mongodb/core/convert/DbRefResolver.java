@@ -91,4 +91,6 @@ public interface DbRefResolver extends ReferenceResolver {
 	 * @since 1.10
 	 */
 	List<Document> bulkFetch(List<DBRef> dbRefs);
+
+	ReferenceLoader getReferenceLoader();
 }

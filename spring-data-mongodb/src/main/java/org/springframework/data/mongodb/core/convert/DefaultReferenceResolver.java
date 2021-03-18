@@ -35,67 +35,49 @@ import java.util.function.BiFunction;
 
 import org.bson.Document;
 import org.bson.conversions.Bson;
+import org.springframework.data.mongodb.core.mapping.ManualReference;
 import org.springframework.data.mongodb.core.mapping.MongoPersistentProperty;
 import org.springframework.data.util.Streamable;
 import org.springframework.lang.Nullable;
-
-import com.mongodb.DBRef;
 
 /**
  * @author Christoph Strobl
  * @since 2021/03
  */
-public interface ReferenceResolver {
+public class DefaultReferenceResolver implements ReferenceResolver {
+
+	private final ReferenceReader referenceReader;
+	private final LazyLoadingProxyGenerator proxyGenerator;
+
+	public DefaultReferenceResolver(ReferenceReader referenceLoader) {
+
+		this.referenceReader = referenceLoader;
+		this.proxyGenerator = new LazyLoadingProxyGenerator(referenceReader);
+	}
 
 	@Nullable
-	Object resolveReference(MongoPersistentProperty property, Object source, BiFunction<ReferenceContext, Bson, Streamable<Document>> lookupFunction);
+	@Override
+	public Object resolveReference(MongoPersistentProperty property, Object source,
+			BiFunction<ReferenceContext, Bson, Streamable<Document>> lookupFunction) {
 
-	class ReferenceContext {
-
-		@Nullable final String database;
-		final String collection;
-
-		public ReferenceContext(@Nullable String database, String collection) {
-			this.database = database;
-			this.collection = collection;
+		if (isLazyReference(property)) {
+			return createLazyLoadingProxy(property, source, lookupFunction);
 		}
 
-		static ReferenceContext fromDBRef(DBRef dbRef) {
-			return new ReferenceContext(dbRef.getDatabaseName(), dbRef.getCollectionName());
+		return referenceReader.readReference(property, source, lookupFunction);
+	}
+
+	private Object createLazyLoadingProxy(MongoPersistentProperty property, Object source,
+			BiFunction<ReferenceContext, Bson, Streamable<Document>> lookupFunction) {
+		return proxyGenerator.createLazyLoadingProxy(property, source, lookupFunction);
+	}
+
+	protected boolean isLazyReference(MongoPersistentProperty property) {
+
+		if(property.findAnnotation(ManualReference.class) != null) {
+			return property.findAnnotation(ManualReference.class).lazy();
 		}
 
-		public String getCollection() {
-			return collection;
-		}
-
-		@Nullable
-		public String getDatabase() {
-			return database;
-		}
-	}
-
-	class ResolutionContext {
-		ReferenceResolverCallback callback;
-		ReferenceProxyHandler proxyHandler;
-		OrderFunction orderFunction;
-	}
-
-	interface ReferenceResolverCallback {
-
-		/**
-		 * Resolve the final object for the given {@link MongoPersistentProperty}.
-		 *
-		 * @param property will never be {@literal null}.
-		 * @return
-		 */
-		Object resolve(MongoPersistentProperty property);
-	}
-
-	interface ReferenceProxyHandler {
-		Object populateId(MongoPersistentProperty property, @Nullable Object source, Object proxy);
-	}
-
-	interface OrderFunction {
-		BiFunction<Object, Document, Document> order();
+		return property.getDBRef() != null && property.getDBRef().lazy();
 	}
 }

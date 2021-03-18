@@ -26,6 +26,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.function.BiFunction;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -76,6 +77,7 @@ public class DefaultDbRefResolver implements DbRefResolver, ReferenceResolver {
 	private final MongoDatabaseFactory mongoDbFactory;
 	private final PersistenceExceptionTranslator exceptionTranslator;
 	private final ObjenesisStd objenesis;
+	private final ReferenceLoader referenceLoader;
 
 	/**
 	 * Creates a new {@link DefaultDbRefResolver} with the given {@link MongoDatabaseFactory}.
@@ -87,6 +89,7 @@ public class DefaultDbRefResolver implements DbRefResolver, ReferenceResolver {
 		Assert.notNull(mongoDbFactory, "MongoDbFactory translator must not be null!");
 
 		this.mongoDbFactory = mongoDbFactory;
+		this.referenceLoader = new DefaultReferenceLoader(mongoDbFactory);
 		this.exceptionTranslator = mongoDbFactory.getExceptionTranslator();
 		this.objenesis = new ObjenesisStd(true);
 	}
@@ -112,7 +115,8 @@ public class DefaultDbRefResolver implements DbRefResolver, ReferenceResolver {
 
 	@Nullable
 	@Override
-	public Object resolveReference(MongoPersistentProperty property, Object source, ResolutionContext context) {
+	public Object resolveReference(MongoPersistentProperty property, Object source, BiFunction<ReferenceContext, Bson, Streamable<Document>> lookupFunction) {
+
 
 		return null;
 	}
@@ -123,36 +127,8 @@ public class DefaultDbRefResolver implements DbRefResolver, ReferenceResolver {
 	 */
 	@Override
 	public Document fetch(DBRef dbRef) {
-		return fetch(Filters.eq("_id", dbRef.getId()), ReferenceContext.fromDBRef(dbRef));
+		return referenceLoader.fetch(Filters.eq("_id", dbRef.getId()), ReferenceContext.fromDBRef(dbRef));
 	}
-
-	@Nullable
-	@Override
-	public Document fetch(Bson filter, ReferenceContext context) {
-
-		MongoCollection<Document> collection = getCollection(context);
-
-		if (LOGGER.isTraceEnabled()) {
-			LOGGER.trace("Fetching Reference '{}' from {}.{}.", filter,
-					StringUtils.hasText(context.getDatabase()) ? context.getDatabase()
-							: collection.getNamespace().getDatabaseName(),
-					context.getCollection());
-		}
-		return collection.find(filter).first();
-	}
-
-//	@Nullable
-//	@Override
-//	public Document fetch(Document dbRef) {
-//
-//		System.out.println("fetching: " + dbRef);
-//		MongoCollection<Document> collection = MongoDatabaseUtils.getDatabase("manual-reference-tests", mongoDbFactory)
-//				.getCollection("justSomeType", Document.class);
-//
-//		Document x = collection.find(dbRef).first();
-//		System.out.println("x: " + x);
-//		return x;
-//	}
 
 	/*
 	 * (non-Javadoc)
@@ -191,24 +167,13 @@ public class DefaultDbRefResolver implements DbRefResolver, ReferenceResolver {
 					databaseSource.getCollectionName());
 		}
 
-		List<Document> result = bulkFetch(new Document("_id", new Document("$in", ids)), ReferenceContext.fromDBRef(refs.iterator().next())).toList();
+		List<Document> result = referenceLoader
+				.bulkFetch(new Document("_id", new Document("$in", ids)), ReferenceContext.fromDBRef(refs.iterator().next()))
+				.toList();
 
 		return ids.stream() //
 				.flatMap(id -> documentWithId(id, result)) //
 				.collect(Collectors.toList());
-	}
-
-	@Override
-	public Streamable<Document> bulkFetch(Bson filter, ReferenceContext context) {
-
-		MongoCollection<Document> mongoCollection = getCollection(context);
-
-		if (LOGGER.isTraceEnabled()) {
-			LOGGER.trace("Bulk fetching {} from {}.{}.", filter, mongoCollection.getNamespace().getDatabaseName(), context.getCollection());
-		}
-
-		return Streamable.of(mongoCollection //
-				.find(filter));
 	}
 
 	/**
@@ -285,6 +250,10 @@ public class DefaultDbRefResolver implements DbRefResolver, ReferenceResolver {
 		return documents.stream() //
 				.filter(it -> it.get("_id").equals(identifier)) //
 				.limit(1);
+	}
+
+	public ReferenceLoader getReferenceLoader() {
+		return referenceLoader;
 	}
 
 	/**

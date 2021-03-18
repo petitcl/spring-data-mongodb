@@ -115,6 +115,7 @@ public class DbRefMappingMongoConverterUnitTests {
 		when(dbMock.getCollection(anyString(), eq(Document.class))).thenReturn(collectionMock);
 
 		FindIterable fi = mock(FindIterable.class);
+		when(fi.limit(anyInt())).thenReturn(fi);
 		when(fi.first()).thenReturn(mapValDocument);
 		when(collectionMock.find(Mockito.any(Bson.class))).thenReturn(fi);
 

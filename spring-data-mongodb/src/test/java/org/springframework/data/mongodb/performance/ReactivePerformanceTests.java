@@ -19,6 +19,7 @@ import static org.springframework.data.mongodb.core.query.Criteria.*;
 import static org.springframework.data.mongodb.core.query.Query.*;
 
 import org.bson.conversions.Bson;
+import org.springframework.data.mongodb.core.convert.ReferenceLoader;
 import org.springframework.data.util.Streamable;
 import org.springframework.lang.Nullable;
 import reactor.core.publisher.Flux;
@@ -26,6 +27,7 @@ import reactor.core.publisher.Mono;
 
 import java.text.DecimalFormat;
 import java.util.*;
+import java.util.function.BiFunction;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
@@ -99,20 +101,10 @@ public class ReactivePerformanceTests {
 		context.afterPropertiesSet();
 
 		converter = new MappingMongoConverter(new DbRefResolver() {
-			@Nullable
-			@Override
-			public Object resolveReference(MongoPersistentProperty property, Object source, ResolutionContext context) {
-				return null;
-			}
 
 			@Nullable
 			@Override
-			public Document fetch(Bson filter, ReferenceContext context) {
-				return null;
-			}
-
-			@Override
-			public Streamable<Document> bulkFetch(Bson filter, ReferenceContext context) {
+			public Object resolveReference(MongoPersistentProperty property, Object source, BiFunction<ReferenceContext, Bson, Streamable<Document>> lookupFunction) {
 				return null;
 			}
 
@@ -135,6 +127,11 @@ public class ReactivePerformanceTests {
 
 			@Override
 			public List<Document> bulkFetch(List<DBRef> dbRefs) {
+				return null;
+			}
+
+			@Override
+			public ReferenceLoader getReferenceLoader() {
 				return null;
 			}
 		}, context);

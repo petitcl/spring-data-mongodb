@@ -138,6 +138,7 @@ public class MappingMongoConverter extends AbstractMongoConverter implements App
 		Assert.notNull(mappingContext, "MappingContext must not be null!");
 
 		this.dbRefResolver = dbRefResolver;
+
 		this.mappingContext = mappingContext;
 		this.typeMapper = new DefaultMongoTypeMapper(DefaultMongoTypeMapper.DEFAULT_TYPE_KEY, mappingContext,
 				this::getWriteTarget);
@@ -497,11 +498,16 @@ public class MappingMongoConverter extends AbstractMongoConverter implements App
 
 		if (property.isAnnotationPresent(ManualReference.class)) {
 
-			Object targetValue = referenceReader.readReference(property, value, (ctx, filter) -> {
-				return dbRefResolver.bulkFetch(filter, ctx);
-			});
+			DefaultReferenceResolver referenceResolver = new DefaultReferenceResolver(referenceReader);
+			accessor.setProperty(property, referenceResolver.resolveReference(property, value, (ctx, filter) -> {
+				return dbRefResolver.getReferenceLoader().bulkFetch(filter, ctx);
+			}));
 
-			accessor.setProperty(property, targetValue);
+//			Object targetValue = referenceReader.readReference(property, value, (ctx, filter) -> {
+//				return dbRefResolver.getReferenceLoader().bulkFetch(filter, ctx);
+//			});
+//
+//			accessor.setProperty(property, targetValue);
 			return;
 		}
 

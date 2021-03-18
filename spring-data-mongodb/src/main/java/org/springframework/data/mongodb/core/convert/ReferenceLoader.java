@@ -31,71 +31,21 @@
  */
 package org.springframework.data.mongodb.core.convert;
 
-import java.util.function.BiFunction;
-
 import org.bson.Document;
 import org.bson.conversions.Bson;
-import org.springframework.data.mongodb.core.mapping.MongoPersistentProperty;
+import org.springframework.data.mongodb.core.convert.ReferenceResolver.ReferenceContext;
 import org.springframework.data.util.Streamable;
 import org.springframework.lang.Nullable;
-
-import com.mongodb.DBRef;
 
 /**
  * @author Christoph Strobl
  * @since 2021/03
  */
-public interface ReferenceResolver {
+public interface ReferenceLoader {
 
 	@Nullable
-	Object resolveReference(MongoPersistentProperty property, Object source, BiFunction<ReferenceContext, Bson, Streamable<Document>> lookupFunction);
+	Document fetch(Bson filter, ReferenceContext context);
 
-	class ReferenceContext {
+	Streamable<Document> bulkFetch(Bson filter, ReferenceContext context);
 
-		@Nullable final String database;
-		final String collection;
-
-		public ReferenceContext(@Nullable String database, String collection) {
-			this.database = database;
-			this.collection = collection;
-		}
-
-		static ReferenceContext fromDBRef(DBRef dbRef) {
-			return new ReferenceContext(dbRef.getDatabaseName(), dbRef.getCollectionName());
-		}
-
-		public String getCollection() {
-			return collection;
-		}
-
-		@Nullable
-		public String getDatabase() {
-			return database;
-		}
-	}
-
-	class ResolutionContext {
-		ReferenceResolverCallback callback;
-		ReferenceProxyHandler proxyHandler;
-		OrderFunction orderFunction;
-	}
-
-	interface ReferenceResolverCallback {
-
-		/**
-		 * Resolve the final object for the given {@link MongoPersistentProperty}.
-		 *
-		 * @param property will never be {@literal null}.
-		 * @return
-		 */
-		Object resolve(MongoPersistentProperty property);
-	}
-
-	interface ReferenceProxyHandler {
-		Object populateId(MongoPersistentProperty property, @Nullable Object source, Object proxy);
-	}
-
-	interface OrderFunction {
-		BiFunction<Object, Document, Document> order();
-	}
 }
