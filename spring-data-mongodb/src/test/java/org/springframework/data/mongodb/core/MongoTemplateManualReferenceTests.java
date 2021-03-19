@@ -47,6 +47,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.core.convert.converter.Converter;
 import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.convert.LazyLoadingTestUtils;
 import org.springframework.data.mongodb.core.mapping.DBRef;
 import org.springframework.data.mongodb.core.mapping.Field;
 import org.springframework.data.mongodb.core.mapping.ManualReference;
@@ -147,6 +148,12 @@ public class MongoTemplateManualReferenceTests {
 		});
 
 		SingleRefRoot result = template.findOne(query(where("id").is("id-1")), SingleRefRoot.class);
+
+		LazyLoadingTestUtils.assertProxy(result.simpleLazyValueRef, (proxy) -> {
+
+			assertThat(proxy.isResolved()).isFalse();
+			assertThat(proxy.currentValue()).isNull();
+		});
 		assertThat(result.getSimpleLazyValueRef()).isEqualTo(new SimpleObjectRef("ref-1", "me-the-referenced-object"));
 	}
 
@@ -303,6 +310,34 @@ public class MongoTemplateManualReferenceTests {
 	}
 
 	@Test
+	void readLazyObjectReferenceFromDocumentNotRelatingToTheIdProperty() {
+
+		String rootCollectionName = template.getCollectionName(SingleRefRoot.class);
+		String refCollectionName = template.getCollectionName(ObjectRefOnNonIdField.class);
+		org.bson.Document refSource = new Document("_id", "ref-1").append("refKey1", "ref-key-1")
+				.append("refKey2", "ref-key-2").append("value", "me-the-referenced-object");
+		org.bson.Document source = new Document("_id", "id-1").append("value", "v1").append("lazyObjectValueRefOnNonIdFields",
+				new Document("refKey1", "ref-key-1").append("refKey2", "ref-key-2").append("property", "without-any-meaning"));
+
+		template.execute(db -> {
+
+			db.getCollection(refCollectionName).insertOne(refSource);
+			db.getCollection(rootCollectionName).insertOne(source);
+			return null;
+		});
+
+		SingleRefRoot result = template.findOne(query(where("id").is("id-1")), SingleRefRoot.class);
+
+		LazyLoadingTestUtils.assertProxy(result.lazyObjectValueRefOnNonIdFields, (proxy) -> {
+
+			assertThat(proxy.isResolved()).isFalse();
+			assertThat(proxy.currentValue()).isNull();
+		});
+		assertThat(result.getLazyObjectValueRefOnNonIdFields())
+				.isEqualTo(new ObjectRefOnNonIdField("ref-1", "me-the-referenced-object", "ref-key-1", "ref-key-2"));
+	}
+
+	@Test
 	void readCollectionObjectReferenceFromDocumentNotRelatingToTheIdProperty() {
 
 		String rootCollectionName = template.getCollectionName(CollectionRefRoot.class);
@@ -349,6 +384,9 @@ public class MongoTemplateManualReferenceTests {
 
 		@ManualReference(lookup = "{ 'refKey1' : '?#{refKey1}', 'refKey2' : '?#{refKey2}' }") //
 		ObjectRefOnNonIdField objectValueRefOnNonIdFields;
+
+		@ManualReference(lookup = "{ 'refKey1' : '?#{refKey1}', 'refKey2' : '?#{refKey2}' }", lazy = true) //
+		ObjectRefOnNonIdField lazyObjectValueRefOnNonIdFields;
 	}
 
 	@Data
@@ -360,7 +398,8 @@ public class MongoTemplateManualReferenceTests {
 		@ManualReference(lookup = "{ '_id' : '?#{#target}' }") //
 		List<SimpleObjectRef> simpleValueRef;
 
-		@Field("simple-value-ref-annotated-field-name") @ManualReference(lookup = "{ '_id' : '?#{#target}' }") //
+		@Field("simple-value-ref-annotated-field-name") //
+		@ManualReference(lookup = "{ '_id' : '?#{#target}' }") //
 		List<SimpleObjectRef> simpleValueRefWithAnnotatedFieldName;
 
 		@ManualReference(lookup = "{ '_id' : '?#{id}' }") //

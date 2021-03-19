@@ -736,8 +736,14 @@ public class MappingMongoConverter extends AbstractMongoConverter implements App
 			return;
 		}
 
-		if (prop.isAssociation() && conversionService.canConvert(valueType.getType(), ObjectReference.class)) {
-			accessor.put(prop, conversionService.convert(obj, ObjectReference.class).getPointer());
+		if (prop.isAssociation()) {
+
+			if(conversionService.canConvert(valueType.getType(), ObjectReference.class)) {
+				accessor.put(prop, conversionService.convert(obj, ObjectReference.class).getPointer());
+			} else {
+				// just take the id as a reference
+				accessor.put(prop, mappingContext.getPersistentEntity(prop.getAssociationTargetType()).getIdentifierAccessor(obj).getIdentifier());
+			}
 			return;
 		}
 

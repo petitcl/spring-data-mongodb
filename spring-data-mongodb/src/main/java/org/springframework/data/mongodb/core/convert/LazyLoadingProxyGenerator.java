@@ -67,8 +67,6 @@ import org.springframework.util.ReflectionUtils;
  */
 public class LazyLoadingProxyGenerator {
 
-
-
 	private final ObjenesisStd objenesis;
 	private final ReferenceReader referenceReader;
 
@@ -81,7 +79,7 @@ public class LazyLoadingProxyGenerator {
 	public Object createLazyLoadingProxy(MongoPersistentProperty property, Object source,  BiFunction<ReferenceContext, Bson, Streamable<Document>> lookupFunction) {
 
 		Class<?> propertyType = property.getType();
-		LazyLoadingInterceptor interceptor = new LazyLoadingInterceptor(property, source, lookupFunction);
+		LazyLoadingInterceptor interceptor = new LazyLoadingInterceptor(property, source, referenceReader, lookupFunction);
 
 		if (!propertyType.isInterface()) {
 
@@ -121,10 +119,11 @@ public class LazyLoadingProxyGenerator {
 	}
 
 
-	class LazyLoadingInterceptor
+	public static class LazyLoadingInterceptor
 			implements MethodInterceptor, org.springframework.cglib.proxy.MethodInterceptor, Serializable {
 
 
+		private final ReferenceReader referenceReader;
 		MongoPersistentProperty property;
 		private volatile boolean resolved;
 		private @org.springframework.lang.Nullable Object result;
@@ -143,10 +142,11 @@ public class LazyLoadingProxyGenerator {
 			}
 		}
 
-		public LazyLoadingInterceptor(MongoPersistentProperty property, Object source, BiFunction<ReferenceContext, Bson, Streamable<Document>> lookupFunction) {
+		public LazyLoadingInterceptor(MongoPersistentProperty property, Object source, ReferenceReader reader, BiFunction<ReferenceContext, Bson, Streamable<Document>> lookupFunction) {
 
 			this.property = property;
 			this.source = source;
+			this.referenceReader = reader;
 			this.lookupFunction = lookupFunction;
 		}
 
