@@ -34,6 +34,7 @@ import org.springframework.data.geo.Circle;
 import org.springframework.data.geo.Point;
 import org.springframework.data.geo.Shape;
 import org.springframework.data.mongodb.InvalidMongoDbApiUsageException;
+import org.springframework.data.mongodb.core.aggregation.AggregationExpression;
 import org.springframework.data.mongodb.core.geo.GeoJson;
 import org.springframework.data.mongodb.core.geo.Sphere;
 import org.springframework.data.mongodb.core.schema.JsonSchemaObject.Type;
@@ -783,6 +784,13 @@ public class Criteria implements CriteriaDefinition {
 
 		BasicDBList bsonList = createCriteriaList(criteria);
 		return registerCriteriaChainElement(new Criteria("$and").is(bsonList));
+	}
+
+	public Criteria exprOperator(AggregationExpression expression) {
+		Assert.notNull(expression, "Expression must not be null!");
+
+		Document document = expression.toDocument();
+		return registerCriteriaChainElement(new Criteria("$expr").is(document));
 	}
 
 	private Criteria registerCriteriaChainElement(Criteria criteria) {

@@ -26,6 +26,8 @@ import org.junit.Test;
 
 import org.springframework.data.geo.Point;
 import org.springframework.data.mongodb.InvalidMongoDbApiUsageException;
+import org.springframework.data.mongodb.core.aggregation.Aggregation;
+import org.springframework.data.mongodb.core.aggregation.ComparisonOperators;
 import org.springframework.data.mongodb.core.geo.GeoJsonLineString;
 import org.springframework.data.mongodb.core.geo.GeoJsonPoint;
 import org.springframework.data.mongodb.core.schema.MongoJsonSchema;
@@ -358,4 +360,68 @@ public class CriteriaUnitTests {
 
 		assertThat(left).isNotEqualTo(right);
 	}
+
+	@Test
+	public void shouldHandleAggregationExpression() {
+		Criteria criteria = new Criteria()
+			.exprOperator(
+				ComparisonOperators.Eq.valueOf("firstName").equalTo("lastName")
+			);
+
+		assertThat(criteria.getCriteriaObject())
+			.isEqualTo("{\"$expr\":{\"$eq\":[\"$firstName\",\"$lastName\"]}}");
+	}
+
+	@Test
+	public void shouldPrependAggregationExpression() {
+		Criteria criteria = new Criteria()
+			.exprOperator(
+				ComparisonOperators.Eq.valueOf("firstName").equalTo("lastName")
+			)
+			.and("firstName").is("John");
+
+		assertThat(criteria.getCriteriaObject())
+			.isEqualTo("{\"$expr\":{\"$eq\":[\"$firstName\",\"$lastName\"]},\"firstName\": \"John\"}");
+	}
+
+	@Test
+	public void shouldAppendAggregationExpression() {
+		Criteria criteria = new Criteria()
+			.and("firstName").is("John")
+			.exprOperator(
+				ComparisonOperators.Eq.valueOf("firstName").equalTo("lastName")
+			);
+
+		assertThat(criteria.getCriteriaObject())
+			.isEqualTo("{\"$expr\":{\"$eq\":[\"$firstName\",\"$lastName\"]},\"firstName\": \"John\"}");
+	}
+
+	@Test
+	public void shouldHandleAggregationExpressionWithOperator() {
+		Criteria criteria = new Criteria()
+			.orOperator(
+				Criteria.where("firstName").is("John")
+			)
+			.exprOperator(
+				ComparisonOperators.Eq.valueOf("firstName").equalTo("lastName")
+			);
+
+		assertThat(criteria.getCriteriaObject())
+			.isEqualTo("{\"$or\": [{\"firstName\":\"John\"}], \"$expr\":{\"$eq\":[\"$firstName\",\"$lastName\"]}}");
+	}
+
+	@Test
+	public void shouldHandleAggregationExpressionWithSystemVariables() {
+		Criteria criteria = new Criteria()
+			.orOperator(
+				Criteria.where("firstName").is("John")
+			)
+			.exprOperator(
+				ComparisonOperators.Eq.valueOf(Aggregation.ROOT).equalTo("lastName")
+			);
+
+		assertThat(criteria.getCriteriaObject())
+			.isEqualTo("{\"$or\": [{\"firstName\":\"John\"}], \"$expr\":{\"$eq\":[\"$$ROOT\",\"$lastName\"]}}");
+	}
+
 }
